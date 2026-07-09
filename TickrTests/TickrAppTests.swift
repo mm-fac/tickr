@@ -1,7 +1,9 @@
 import XCTest
+@testable import Tickr
 
 final class TickrAppTests: XCTestCase {
-    func testScaffold() {
-        XCTAssertTrue(true)
+    func testFavoritesPlaceholderStartsEmpty() {
+        let model = FavoritesPlaceholderModel()
+        XCTAssertTrue(model.favorites.isEmpty)
     }
 }
