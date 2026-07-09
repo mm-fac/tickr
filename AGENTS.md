@@ -22,6 +22,6 @@ unless the issue explicitly says so.
 
 ## Check commands (run what your environment supports; CI runs all)
 1. `swift test --package-path TickrCore`   ← always run this
-2. `xcodegen generate && xcodebuild -project Tickr.xcodeproj -scheme Tickr test -destination platform=macOS CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO`
+2. `xcodegen generate && xcodebuild -project Tickr.xcodeproj -scheme Tickr test -destination platform=macOS CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO`
    ← run if xcodebuild is available; otherwise ensure (1) passes and keep app code
    consistent — CI is the enforcing gate.

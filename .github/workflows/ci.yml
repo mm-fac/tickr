@@ -18,7 +18,7 @@ jobs:
         run: >
           xcodebuild -project Tickr.xcodeproj -scheme Tickr test
           -destination platform=macOS
-          CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO
   protected-paths:
     runs-on: ubuntu-latest
     steps:
