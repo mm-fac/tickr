@@ -1,0 +1,40 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  ci:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Core tests
+        run: swift test --package-path TickrCore
+      - name: Generate project
+        run: xcodegen generate
+      - name: Build and test app
+        run: >
+          xcodebuild -project Tickr.xcodeproj -scheme Tickr test
+          -destination platform=macOS
+          CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+  protected-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Agent branches must not touch protected paths
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then echo "push — n/a"; exit 0; fi
+          case "${{ github.head_ref }}" in
+            codex/*|claude/*)
+              git fetch -q origin "${{ github.base_ref }}"
+              CHANGED=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+              echo "$CHANGED"
+              if echo "$CHANGED" | grep -qE '^(\.github/|AGENTS\.md|project\.yml|Tickr/Tickr\.entitlements|\.claude|\.mcp\.json)'; then
+                echo "::error::agent branch touches a protected path"; exit 1
+              fi
+              echo "clean" ;;
+            *) echo "operator branch — exempt" ;;
+          esac

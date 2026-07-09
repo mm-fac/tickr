@@ -1,0 +1,33 @@
+name: Tickr
+options:
+  bundleIdPrefix: com.mmfac
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  TickrCore:
+    path: TickrCore
+targets:
+  Tickr:
+    type: application
+    platform: macOS
+    sources: [Tickr]
+    dependencies:
+      - package: TickrCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mmfac.tickr
+        SWIFT_VERSION: "5.9"
+        CODE_SIGN_ENTITLEMENTS: Tickr/Tickr.entitlements
+  TickrTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources: [TickrTests]
+    dependencies:
+      - target: Tickr
+schemes:
+  Tickr:
+    build:
+      targets:
+        Tickr: all
+    test:
+      targets: [TickrTests]

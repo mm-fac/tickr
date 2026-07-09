@@ -1,0 +1,29 @@
+name: Dispatch to Codex
+
+# P1 autonomy wiring: when an issue gets the `codex` label, comment `@codex`
+# on it AS THE MACHINE ACCOUNT (via FACTORY_BOT_PAT). Codex ignores mentions
+# from unlinked identities, so the PAT must belong to the GitHub account whose
+# ChatGPT connection is live. Fallback if this proves unreliable: dispatch
+# manually from the Codex web UI or by hand-commenting @codex.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  issues: write
+
+jobs:
+  dispatch:
+    if: github.event.label.name == 'codex'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mention @codex as the machine account
+        run: |
+          gh issue comment "$ISSUE_URL" --body \
+            "@codex please implement this issue. Follow AGENTS.md. Open a PR on a codex/* branch that references this issue with 'Fixes #$ISSUE_NUMBER'."
+        env:
+          GH_TOKEN: ${{ secrets.FACTORY_BOT_PAT }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
