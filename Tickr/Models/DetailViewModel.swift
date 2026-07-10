@@ -29,17 +29,8 @@ final class DetailViewModel {
         case loading
         case loaded([ChartPoint])
         case empty
-        /// A range the provider structurally can't serve (not a failure) — e.g. Stooq has
-        /// no intraday history on the free plan, so 1D lands here instead of ``failed``.
-        /// The view explains this calmly rather than showing an error.
-        case unavailable(reason: String)
         case failed(reason: String?)
     }
-
-    /// Shown when the selected range is intraday (1D) but the live provider offers no
-    /// intraday history — a friendly explanation, not an error.
-    static let intradayUnavailableMessage =
-        "Intraday data is not available on the free data plan. Choose a longer range to see this chart."
 
     let symbol: String
     /// The latest quote for the header, or nil while loading or when it failed to load.
@@ -96,22 +87,8 @@ final class DetailViewModel {
             state = points.isEmpty ? .empty : .loaded(points)
         } catch {
             guard requestedRange == range else { return }
-            // A provider declining a range it can't serve (e.g. Stooq rejecting 1D intraday)
-            // is expected, not a failure — surface the friendly unavailable state instead.
-            if Self.isUnsupportedRange(error) {
-                state = .unavailable(reason: Self.intradayUnavailableMessage)
-            } else {
-                state = .failed(reason: Self.reason(for: error))
-            }
+            state = .failed(reason: Self.reason(for: error))
         }
-    }
-
-    /// Whether an error is the live provider declining a range it structurally cannot serve
-    /// (e.g. Stooq has no intraday candles on the free plan), as opposed to a genuine
-    /// failure. These map to the friendly ``ChartState/unavailable(reason:)`` state.
-    static func isUnsupportedRange(_ error: Error) -> Bool {
-        if case StooqCandleProviderError.unsupportedRange = error { return true }
-        return false
     }
 
     /// Map a series' candles to chart points, one per candle close, preserving order.
