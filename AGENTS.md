@@ -23,5 +23,5 @@ unless the issue explicitly says so.
 ## Check commands (run what your environment supports; CI runs all)
 1. `swift test --package-path TickrCore`   ← always run this
 2. `xcodegen generate && xcodebuild -project Tickr.xcodeproj -scheme Tickr test -destination platform=macOS CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO`
-   ← run if xcodebuild is available; otherwise ensure (1) passes and keep app code
-   consistent — CI is the enforcing gate.
+   ← REQUIRED before finishing: Xcode is installed in this environment (26.6+).
+   CI re-verifies, but a diff that was never built locally is a defect.
