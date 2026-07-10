@@ -8,7 +8,23 @@ public enum FinnhubProviderError: Error, Equatable, Sendable {
     case invalidURL
     case invalidResponse
     case httpError(statusCode: Int)
+    /// A non-2xx response whose body was Finnhub's `{"error": ...}` shape, carrying the
+    /// provider's own reason text (e.g. free-tier access denials on `/stock/candle`).
+    /// Distinct from ``httpError(statusCode:)`` so callers can surface the real reason
+    /// instead of a bare status code or a blank view.
+    case apiError(statusCode: Int, message: String)
     case decodingFailed
+
+    /// The provider's human-readable reason, when one is available. Non-nil only for
+    /// ``apiError(statusCode:message:)`` — lets UI show *why* a request failed.
+    public var message: String? {
+        switch self {
+        case .apiError(_, let message):
+            return message
+        case .invalidSymbol, .invalidURL, .invalidResponse, .httpError, .decodingFailed:
+            return nil
+        }
+    }
 }
 
 public struct FinnhubProvider: QuoteProvider {
@@ -41,7 +57,7 @@ public struct FinnhubProvider: QuoteProvider {
         let request = try makeRequest(for: normalizedSymbol)
         let (data, response) = try await httpClient.data(for: request)
         guard (200..<300).contains(response.statusCode) else {
-            throw FinnhubProviderError.httpError(statusCode: response.statusCode)
+            throw mapFailure(status: response.statusCode, body: data)
         }
 
         do {
@@ -84,6 +100,18 @@ public struct FinnhubProvider: QuoteProvider {
         }
         return URLRequest(url: url)
     }
+
+    /// Turn a non-2xx response into a typed error. When the body is Finnhub's
+    /// `{"error": ...}` shape, preserve the provider's reason as ``FinnhubProviderError/apiError(statusCode:message:)``
+    /// so a JSON error body never surfaces as a bare status code (or, worse, a decode
+    /// failure); otherwise fall back to ``FinnhubProviderError/httpError(statusCode:)``.
+    private func mapFailure(status: Int, body: Data) -> FinnhubProviderError {
+        if let error = try? decoder.decode(FinnhubErrorResponse.self, from: body),
+           !error.error.isEmpty {
+            return .apiError(statusCode: status, message: error.error)
+        }
+        return .httpError(statusCode: status)
+    }
 }
 
 extension FinnhubProvider: CandleProvider {
@@ -97,7 +125,7 @@ extension FinnhubProvider: CandleProvider {
         let request = try makeCandleRequest(for: normalizedSymbol, window: window)
         let (data, response) = try await httpClient.data(for: request)
         guard (200..<300).contains(response.statusCode) else {
-            throw FinnhubProviderError.httpError(statusCode: response.statusCode)
+            throw mapFailure(status: response.statusCode, body: data)
         }
 
         do {
@@ -152,7 +180,7 @@ extension FinnhubProvider: SymbolSearchProvider {
         let request = try makeSearchRequest(for: trimmedQuery)
         let (data, response) = try await httpClient.data(for: request)
         guard (200..<300).contains(response.statusCode) else {
-            throw FinnhubProviderError.httpError(statusCode: response.statusCode)
+            throw mapFailure(status: response.statusCode, body: data)
         }
 
         do {
@@ -185,6 +213,13 @@ extension FinnhubProvider: SymbolSearchProvider {
         }
         return URLRequest(url: url)
     }
+}
+
+/// Finnhub's error envelope, returned (with a non-2xx status) when a request is
+/// rejected — e.g. `{"error": "You do not have access to this resource."}` on the free
+/// tier's `/stock/candle`.
+private struct FinnhubErrorResponse: Decodable {
+    let error: String
 }
 
 private struct FinnhubSearchResponse: Decodable {

@@ -142,7 +142,23 @@ final class DetailViewModelTests: XCTestCase {
 
         await model.load()
 
-        XCTAssertEqual(model.state, .failed)
+        XCTAssertEqual(model.state, .failed(reason: nil))
+    }
+
+    func testProviderErrorWithMessageSurfacesReasonInFailedState() async throws {
+        // A provider that rejects with a reason (e.g. Finnhub's free-tier access denial)
+        // must surface that text in the error state instead of a blank chart.
+        let message = "You do not have access to this resource."
+        let provider = ThrowingCandleProvider(error: FinnhubProviderError.apiError(statusCode: 403, message: message))
+        let model = DetailViewModel(
+            symbol: "AAPL",
+            quoteProvider: MockQuoteProvider(),
+            candleProvider: provider
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.state, .failed(reason: message))
     }
 
     func testFailedQuoteStillLoadsChart() async throws {
@@ -174,7 +190,7 @@ final class DetailViewModelTests: XCTestCase {
         )
 
         await model.load()
-        XCTAssertEqual(model.state, .failed)
+        XCTAssertEqual(model.state, .failed(reason: nil))
 
         await model.select(.week1)
         guard case .loaded(let points) = model.state else {
@@ -194,6 +210,16 @@ private struct RangeKeyedCandleProvider: CandleProvider {
             throw CandleProviderError.noData(symbol: symbol, range: range)
         }
         return series
+    }
+}
+
+/// Always fails with a fixed error, so tests can prove how the view model surfaces a
+/// specific provider failure (e.g. an access-denied message).
+private struct ThrowingCandleProvider: CandleProvider {
+    let error: Error
+
+    func candles(for symbol: String, range: ChartRange) async throws -> CandleSeries {
+        throw error
     }
 }
 

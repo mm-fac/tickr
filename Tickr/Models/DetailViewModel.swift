@@ -22,12 +22,14 @@ final class DetailViewModel {
     }
 
     /// The chart's load state. Distinguishes "no candles came back" (``empty``) from
-    /// "the provider threw" (``failed``) so the view can explain each differently.
+    /// "the provider threw" (``failed``) so the view can explain each differently. The
+    /// failure carries the provider's own reason text when there is one (e.g. Finnhub's
+    /// free-tier access denial), so the view can show *why* instead of a blank chart.
     enum ChartState: Equatable {
         case loading
         case loaded([ChartPoint])
         case empty
-        case failed
+        case failed(reason: String?)
     }
 
     let symbol: String
@@ -85,12 +87,19 @@ final class DetailViewModel {
             state = points.isEmpty ? .empty : .loaded(points)
         } catch {
             guard requestedRange == range else { return }
-            state = .failed
+            state = .failed(reason: Self.reason(for: error))
         }
     }
 
     /// Map a series' candles to chart points, one per candle close, preserving order.
     static func points(from series: CandleSeries) -> [ChartPoint] {
         series.candles.map { ChartPoint(date: $0.timestamp, close: $0.close) }
+    }
+
+    /// The provider's human-readable reason for a failure, when one is available — so the
+    /// error state can explain what actually went wrong (e.g. an access-denied message)
+    /// rather than a generic "something went wrong". Nil when the error carries no reason.
+    static func reason(for error: Error) -> String? {
+        (error as? FinnhubProviderError)?.message
     }
 }
