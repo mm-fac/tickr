@@ -51,6 +51,56 @@ final class FinnhubProviderTests: XCTestCase {
         }
     }
 
+    func testQuoteErrorBodyMapsToAPIErrorWithMessage() async throws {
+        // The free tier answers /quote for some symbols with a 403 + {"error": ...} body;
+        // the reason must survive as a typed error, not collapse to a bare status code.
+        let client = StubHTTPClient(
+            data: Data(finnhubAccessDeniedJSON.utf8),
+            response: try httpResponse(statusCode: 403)
+        )
+        let provider = FinnhubProvider(apiKey: "test-token", httpClient: client)
+
+        do {
+            _ = try await provider.quote(for: "AAPL")
+            XCTFail("Expected an API error")
+        } catch let error as FinnhubProviderError {
+            XCTAssertEqual(error, .apiError(statusCode: 403, message: "You do not have access to this resource."))
+            XCTAssertEqual(error.message, "You do not have access to this resource.")
+        }
+    }
+
+    func testCandleErrorBodyMapsToAPIErrorWithMessage() async throws {
+        // The bug: the free tier returns 403 + {"error": ...} for /stock/candle. The
+        // reason must reach the caller instead of surfacing as a blank chart.
+        let client = StubHTTPClient(
+            data: Data(finnhubAccessDeniedJSON.utf8),
+            response: try httpResponse(statusCode: 403)
+        )
+        let provider = FinnhubProvider(apiKey: "test-token", httpClient: client)
+
+        do {
+            _ = try await provider.candles(for: "AAPL", range: .day1)
+            XCTFail("Expected an API error")
+        } catch let error as FinnhubProviderError {
+            XCTAssertEqual(error, .apiError(statusCode: 403, message: "You do not have access to this resource."))
+            XCTAssertEqual(error.message, "You do not have access to this resource.")
+        }
+    }
+
+    func testErrorStatusWithoutErrorBodyStillMapsToHTTPError() async throws {
+        // A non-2xx response with no {"error": ...} body keeps the plain status-code error.
+        let client = StubHTTPClient(data: Data(), response: try httpResponse(statusCode: 403))
+        let provider = FinnhubProvider(apiKey: "test-token", httpClient: client)
+
+        do {
+            _ = try await provider.candles(for: "AAPL", range: .day1)
+            XCTFail("Expected an HTTP error")
+        } catch let error as FinnhubProviderError {
+            XCTAssertEqual(error, .httpError(statusCode: 403))
+            XCTAssertNil(error.message)
+        }
+    }
+
     func testMalformedJSONThrowsTypedError() async throws {
         let client = StubHTTPClient(
             data: Data(#"{"c":"not a number"}"#.utf8),
@@ -90,6 +140,12 @@ private let finnhubQuoteJSON = #"""
   "o": 259.12,
   "pc": 258.51,
   "t": 1709596800
+}
+"""#
+
+private let finnhubAccessDeniedJSON = #"""
+{
+  "error": "You do not have access to this resource."
 }
 """#
 

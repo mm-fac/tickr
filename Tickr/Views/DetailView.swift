@@ -57,12 +57,12 @@ struct DetailView: View {
                     description: Text("No prices are available for \(model.symbol) over this range.")
                 )
             }
-        case .failed:
+        case .failed(let reason):
             centered {
                 ContentUnavailableView(
                     "Couldn't load chart",
                     systemImage: "exclamationmark.triangle",
-                    description: Text("Something went wrong loading prices for \(model.symbol).")
+                    description: Text(reason ?? "Something went wrong loading prices for \(model.symbol).")
                 )
             }
         case .loaded(let points):
