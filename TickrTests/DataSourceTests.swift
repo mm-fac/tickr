@@ -201,17 +201,17 @@ final class ProviderRoutingTests: XCTestCase {
         XCTAssertTrue(ProviderFactory.searchProvider(keyStore: keyStore) is RoutingSymbolSearchProvider)
     }
 
-    func testFactoryCandlesUseStooqWhenLive() {
-        // Candles must route to Stooq when live, since Finnhub's free tier blocks candles.
+    func testFactoryCandlesUseYahooWhenLive() {
+        // Candles must route to Yahoo when live, since Finnhub's free tier blocks candles.
         let keyStore = makeKeyStore(key: "k")
         guard let router = ProviderFactory.candleProvider(keyStore: keyStore) as? RoutingCandleProvider else {
             return XCTFail("Expected a RoutingCandleProvider")
         }
-        XCTAssertTrue(router.makeLive("k") is StooqCandleProvider)
+        XCTAssertTrue(router.makeLive("k") is YahooCandleProvider)
     }
 
     func testFactoryQuotesAndSearchStayOnFinnhubWhenLive() {
-        // Quotes and search remain on Finnhub; only candles moved to Stooq.
+        // Quotes and search remain on Finnhub; only candles use Yahoo.
         let keyStore = makeKeyStore(key: "k")
         guard let quoteRouter = ProviderFactory.quoteProvider(keyStore: keyStore) as? RoutingQuoteProvider else {
             return XCTFail("Expected a RoutingQuoteProvider")
