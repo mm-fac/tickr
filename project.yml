@@ -30,9 +30,7 @@ targets:
   TickrUITests:
     type: bundle.ui-testing
     platform: macOS
-    sources:
-      - path: TickrUITests
-        optional: true
+    sources: [TickrUITests]
     dependencies:
       - target: Tickr
 schemes:
