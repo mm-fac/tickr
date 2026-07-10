@@ -34,5 +34,27 @@ struct MockQuoteProvider: QuoteProvider {
             previousClose: 198.87,
             timestamp: Date(timeIntervalSince1970: 1_709_596_800)
         ),
+        "MSFT": Quote(
+            symbol: "MSFT",
+            currentPrice: 430.25,
+            change: -1.50,
+            percentChange: -0.35,
+            high: 435.00,
+            low: 428.75,
+            open: 432.10,
+            previousClose: 431.75,
+            timestamp: Date(timeIntervalSince1970: 1_709_596_800)
+        ),
+        "GOOG": Quote(
+            symbol: "GOOG",
+            currentPrice: 175.40,
+            change: 2.10,
+            percentChange: 1.21,
+            high: 176.00,
+            low: 172.90,
+            open: 173.50,
+            previousClose: 173.30,
+            timestamp: Date(timeIntervalSince1970: 1_709_596_800)
+        ),
     ]
 }
