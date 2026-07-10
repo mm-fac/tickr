@@ -8,6 +8,7 @@ import TickrCore
 struct SidebarView: View {
     let model: SidebarViewModel
     @Bindable var search: SymbolSearchViewModel
+    let settings: SettingsModel
     @Binding var selection: SidebarViewModel.Row.ID?
 
     var body: some View {
@@ -28,6 +29,11 @@ struct SidebarView: View {
         }
         .searchable(text: $search.query, placement: .sidebar, prompt: "Search symbols")
         .navigationTitle("Tickr")
+        .safeAreaInset(edge: .bottom) {
+            if !settings.isLive {
+                SampleDataHint()
+            }
+        }
         .task { await model.refresh() }
     }
 
@@ -35,6 +41,26 @@ struct SidebarView: View {
     /// state (searching, results, empty, or error).
     private var isSearching: Bool {
         search.state != .idle
+    }
+}
+
+/// A gentle, unobtrusive footer shown while the app is on sample data: it points the
+/// user to Settings (⌘,) to add a Finnhub API key. Hidden once a key is configured.
+private struct SampleDataHint: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "key")
+                .foregroundStyle(.secondary)
+            Text("Showing sample data. Add a Finnhub API key in Settings (⌘,) for live prices.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .accessibilityElement(children: .combine)
     }
 }
 
