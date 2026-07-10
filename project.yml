@@ -27,10 +27,16 @@ targets:
     sources: [TickrTests]
     dependencies:
       - target: Tickr
+  TickrUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [TickrUITests]
+    dependencies:
+      - target: Tickr
 schemes:
   Tickr:
     build:
       targets:
         Tickr: all
     test:
-      targets: [TickrTests]
+      targets: [TickrTests, TickrUITests]
