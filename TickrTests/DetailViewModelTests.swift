@@ -179,6 +179,66 @@ final class DetailViewModelTests: XCTestCase {
         XCTAssertEqual(points.map(\.close), [5, 6, 7])
     }
 
+    func testUnsupportedDay1RangeMapsToFriendlyUnavailableState() async throws {
+        // Stooq rejects intraday (1D) on the free plan. That is expected, not a failure:
+        // the view model must surface the friendly unavailable state, not the error path.
+        let provider = ThrowingCandleProvider(error: StooqCandleProviderError.unsupportedRange(.day1))
+        let model = DetailViewModel(
+            symbol: "AAPL",
+            quoteProvider: MockQuoteProvider(),
+            candleProvider: provider,
+            range: .day1
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.state, .unavailable(reason: DetailViewModel.intradayUnavailableMessage))
+        if case .failed = model.state {
+            XCTFail("1D should map to the friendly unavailable state, not the error path.")
+        }
+    }
+
+    func testDay1IsFriendlyWhileOtherRangesChartStooqData() async throws {
+        // Mirrors StooqCandleProvider: 1D is unsupported, other ranges return data.
+        let provider = StooqLikeCandleProvider(seriesByRange: [.week1: series([3, 4, 5])])
+        let model = DetailViewModel(
+            symbol: "AAPL",
+            quoteProvider: MockQuoteProvider(),
+            candleProvider: provider,
+            range: .day1
+        )
+
+        await model.load()
+        XCTAssertEqual(model.state, .unavailable(reason: DetailViewModel.intradayUnavailableMessage))
+
+        // Other ranges chart normally.
+        await model.select(.week1)
+        guard case .loaded(let points) = model.state else {
+            return XCTFail("Expected loaded state for 1W, got \(model.state)")
+        }
+        XCTAssertEqual(points.map(\.close), [3, 4, 5])
+
+        // Returning to 1D shows the friendly state again, not an error.
+        await model.select(.day1)
+        XCTAssertEqual(model.state, .unavailable(reason: DetailViewModel.intradayUnavailableMessage))
+    }
+
+    func testGenuineProviderFailureStillYieldsFailedNotUnavailable() async throws {
+        // A real Stooq failure (e.g. HTTP error) must stay on the error path, so the
+        // friendly state is reserved for the structurally-unsupported intraday case.
+        let provider = ThrowingCandleProvider(error: StooqCandleProviderError.httpError(statusCode: 503))
+        let model = DetailViewModel(
+            symbol: "AAPL",
+            quoteProvider: MockQuoteProvider(),
+            candleProvider: provider,
+            range: .week1
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.state, .failed(reason: nil))
+    }
+
     func testFailedRangeRecoversWhenSwitchingToAWorkingRange() async throws {
         // day1 fails, week1 succeeds — switching ranges recovers from an error.
         let provider = RangeKeyedCandleProvider(seriesByRange: [.week1: series([3, 4, 5])])
@@ -206,6 +266,23 @@ private struct RangeKeyedCandleProvider: CandleProvider {
     let seriesByRange: [ChartRange: CandleSeries]
 
     func candles(for symbol: String, range: ChartRange) async throws -> CandleSeries {
+        guard let series = seriesByRange[range] else {
+            throw CandleProviderError.noData(symbol: symbol, range: range)
+        }
+        return series
+    }
+}
+
+/// Mirrors ``StooqCandleProvider``'s range support: intraday (1D) is unsupported, other
+/// ranges return their seeded series (or throw ``noData`` when unseeded). Lets tests prove
+/// 1D lands on the friendly state while other ranges chart normally.
+private struct StooqLikeCandleProvider: CandleProvider {
+    let seriesByRange: [ChartRange: CandleSeries]
+
+    func candles(for symbol: String, range: ChartRange) async throws -> CandleSeries {
+        guard range != .day1 else {
+            throw StooqCandleProviderError.unsupportedRange(.day1)
+        }
         guard let series = seriesByRange[range] else {
             throw CandleProviderError.noData(symbol: symbol, range: range)
         }

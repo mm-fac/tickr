@@ -90,9 +90,12 @@ enum ProviderFactory {
     }
 
     static func candleProvider(keyStore: APIKeyStore) -> CandleProvider {
+        // Candles come from Stooq when live — Finnhub's free tier blocks candle access,
+        // so quotes/search stay on Finnhub while charts route to Stooq. Stooq needs no
+        // key, so the key handed to makeLive is intentionally ignored.
         RoutingCandleProvider(
             keyStore: keyStore,
-            makeLive: { FinnhubProvider(apiKey: $0) },
+            makeLive: { _ in StooqCandleProvider() },
             mock: PreviewCandleProvider()
         )
     }

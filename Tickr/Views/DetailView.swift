@@ -57,6 +57,14 @@ struct DetailView: View {
                     description: Text("No prices are available for \(model.symbol) over this range.")
                 )
             }
+        case .unavailable(let reason):
+            centered {
+                ContentUnavailableView(
+                    "Intraday data unavailable",
+                    systemImage: "clock.badge.xmark",
+                    description: Text(reason)
+                )
+            }
         case .failed(let reason):
             centered {
                 ContentUnavailableView(
