@@ -7,17 +7,27 @@ struct TickrApp: App {
     @State private var search: SymbolSearchViewModel
     @State private var selection: SidebarViewModel.Row.ID?
     @State private var themeStore = ThemeStore()
+    @State private var apiKeyStore: APIKeyStore
 
-    // MockQuoteProvider / PreviewCandleProvider / MockSymbolSearchProvider stand in until
-    // Settings wires the real providers (later issue).
-    private let quoteProvider: QuoteProvider = MockQuoteProvider()
-    private let candleProvider: CandleProvider = PreviewCandleProvider()
+    // Routing providers switch between live Finnhub and the offline mocks based on the
+    // key in `apiKeyStore`, re-checked per request so entering a key in Settings takes
+    // effect immediately (no restart).
+    private let quoteProvider: QuoteProvider
+    private let candleProvider: CandleProvider
 
     init() {
         // One store, shared by the sidebar and search so adding a result updates both.
         let store = FavoritesStore(fileURL: Self.favoritesFileURL())
-        _sidebar = State(initialValue: SidebarViewModel(store: store, provider: MockQuoteProvider()))
-        _search = State(initialValue: SymbolSearchViewModel(provider: MockSymbolSearchProvider(), store: store))
+        let apiKeyStore = APIKeyStore()
+        _apiKeyStore = State(initialValue: apiKeyStore)
+
+        self.quoteProvider = ProviderFactory.quoteProvider(keyStore: apiKeyStore)
+        self.candleProvider = ProviderFactory.candleProvider(keyStore: apiKeyStore)
+        _sidebar = State(initialValue: SidebarViewModel(store: store, provider: quoteProvider))
+        _search = State(initialValue: SymbolSearchViewModel(
+            provider: ProviderFactory.searchProvider(keyStore: apiKeyStore),
+            store: store
+        ))
     }
 
     var body: some Scene {
@@ -46,7 +56,12 @@ struct TickrApp: App {
         .defaultSize(width: 900, height: 600)
 
         Settings {
-            ThemeSettingsView(store: themeStore)
+            TabView {
+                APIKeySettingsView(store: apiKeyStore)
+                    .tabItem { Label("Data", systemImage: "key") }
+                ThemeSettingsView(store: themeStore)
+                    .tabItem { Label("Appearance", systemImage: "paintbrush") }
+            }
         }
     }
 
