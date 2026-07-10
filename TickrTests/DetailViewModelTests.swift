@@ -212,6 +212,37 @@ final class DetailViewModelTests: XCTestCase {
         }
         XCTAssertEqual(points.map(\.close), [3, 4, 5])
     }
+
+    /// Issue #33 acceptance, end-to-end at the view-model layer: with a key present the
+    /// chart's candles come from the *live* route (which is ``YahooCandleProvider`` in
+    /// production — proven separately by `ProviderRoutingTests.testFactoryCandlesUseYahooWhenLive`),
+    /// and the default 1D range flows through the ordinary `.loaded` path exactly like
+    /// every other range. No special-case "1D unavailable" state is possible — this guards
+    /// against reintroducing one.
+    func testDay1UsesLiveRouteThroughNormalLoadedPath() async throws {
+        let keyStore = APIKeyStore(store: InMemorySecretStore(seed: ["finnhub": "k"]), account: "finnhub")
+        // Live and mock routes return distinguishable closes so the assertion proves which
+        // one answered; the literals live inside the @Sendable closure so nothing is captured.
+        let router = RoutingCandleProvider(
+            keyStore: keyStore,
+            makeLive: { _ in FixedCandleProvider(closes: [11, 12, 13]) },
+            mock: FixedCandleProvider(closes: [90, 91, 92])
+        )
+        let model = DetailViewModel(
+            symbol: "AAPL",
+            quoteProvider: MockQuoteProvider(),
+            candleProvider: router,
+            range: .day1
+        )
+
+        await model.load()
+
+        XCTAssertEqual(model.range, .day1)
+        guard case .loaded(let points) = model.state else {
+            return XCTFail("1D must load through the normal chart path, got \(model.state)")
+        }
+        XCTAssertEqual(points.map(\.close), [11, 12, 13], "1D candles must come from the live route, not the mock.")
+    }
 }
 
 /// Returns a different series per range (or throws when a range isn't seeded), so tests
@@ -224,6 +255,26 @@ private struct RangeKeyedCandleProvider: CandleProvider {
             throw CandleProviderError.noData(symbol: symbol, range: range)
         }
         return series
+    }
+}
+
+/// Returns a series built from fixed close prices, regardless of symbol or range, so a
+/// routing test can tell which route (live vs mock) answered by the closes it gets back.
+private struct FixedCandleProvider: CandleProvider {
+    let closes: [Double]
+
+    func candles(for symbol: String, range: ChartRange) async throws -> CandleSeries {
+        let candles = closes.enumerated().map { index, close in
+            Candle(
+                timestamp: Date(timeIntervalSince1970: 1_700_000_000 + Double(index) * 300),
+                open: close,
+                high: close,
+                low: close,
+                close: close,
+                volume: 1_000
+            )
+        }
+        return CandleSeries(symbol: symbol, resolution: "5", candles: candles)
     }
 }
 
