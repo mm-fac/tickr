@@ -24,8 +24,10 @@ unless the issue explicitly says so.
 - No force-unwraps in production code. Swift Concurrency (async/await), not callbacks.
 - API keys never appear in the repo, in code, or in fixtures.
 
-## Check commands (run what your environment supports; CI runs all)
-1. `swift test --package-path TickrCore`   ← always run this
-2. `xcodegen generate && xcodebuild -project Tickr.xcodeproj -scheme Tickr test -destination platform=macOS CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO`
-   ← REQUIRED before finishing: Xcode is installed in this environment (26.6+).
-   CI re-verifies, but a diff that was never built locally is a defect.
+## Check commands
+1. Attempt `swift test --package-path TickrCore`. If it fails due to SANDBOX
+   restrictions (temp-dir/cache write denials), STOP — do not fight the sandbox,
+   do not build custom test harnesses. The Supervisor runs the full official
+   checks on your diff immediately after handoff, and CI enforces them again.
+2. Before finishing, re-read your own diff for consistency with existing
+   callers and conformances (the checks you cannot run locally).
