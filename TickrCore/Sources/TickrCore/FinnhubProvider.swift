@@ -144,6 +144,70 @@ extension FinnhubProvider: CandleProvider {
     }
 }
 
+extension FinnhubProvider: SymbolSearchProvider {
+    public func search(matching query: String) async throws -> [SymbolSearchResult] {
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else { return [] }
+
+        let request = try makeSearchRequest(for: trimmedQuery)
+        let (data, response) = try await httpClient.data(for: request)
+        guard (200..<300).contains(response.statusCode) else {
+            throw FinnhubProviderError.httpError(statusCode: response.statusCode)
+        }
+
+        do {
+            let searchResponse = try decoder.decode(FinnhubSearchResponse.self, from: data)
+            return searchResponse.result.map { $0.asSymbolSearchResult }
+        } catch {
+            throw FinnhubProviderError.decodingFailed
+        }
+    }
+
+    private func makeSearchRequest(for query: String) throws -> URLRequest {
+        var components: URLComponents
+        if let baseURL {
+            guard let baseComponents = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+                throw FinnhubProviderError.invalidURL
+            }
+            components = baseComponents
+        } else {
+            components = URLComponents()
+            components.scheme = "https"
+            components.host = "finnhub.io"
+            components.path = "/api/v1/search"
+        }
+        components.queryItems = [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "token", value: apiKey),
+        ]
+        guard let url = components.url else {
+            throw FinnhubProviderError.invalidURL
+        }
+        return URLRequest(url: url)
+    }
+}
+
+private struct FinnhubSearchResponse: Decodable {
+    let count: Int
+    let result: [Item]
+
+    struct Item: Decodable {
+        let description: String
+        let displaySymbol: String
+        let symbol: String
+        let type: String
+
+        var asSymbolSearchResult: SymbolSearchResult {
+            SymbolSearchResult(
+                symbol: symbol,
+                description: description,
+                displaySymbol: displaySymbol,
+                type: type
+            )
+        }
+    }
+}
+
 private struct FinnhubQuoteResponse: Decodable {
     let currentPrice: Double
     let change: Double

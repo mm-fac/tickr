@@ -4,22 +4,25 @@ import TickrCore
 @main
 struct TickrApp: App {
     @State private var sidebar: SidebarViewModel
+    @State private var search: SymbolSearchViewModel
     @State private var selection: SidebarViewModel.Row.ID?
 
-    // MockQuoteProvider / PreviewCandleProvider stand in until Settings wires the real
-    // providers (later issue).
+    // MockQuoteProvider / PreviewCandleProvider / MockSymbolSearchProvider stand in until
+    // Settings wires the real providers (later issue).
     private let quoteProvider: QuoteProvider = MockQuoteProvider()
     private let candleProvider: CandleProvider = PreviewCandleProvider()
 
     init() {
+        // One store, shared by the sidebar and search so adding a result updates both.
         let store = FavoritesStore(fileURL: Self.favoritesFileURL())
         _sidebar = State(initialValue: SidebarViewModel(store: store, provider: MockQuoteProvider()))
+        _search = State(initialValue: SymbolSearchViewModel(provider: MockSymbolSearchProvider(), store: store))
     }
 
     var body: some Scene {
         WindowGroup {
             NavigationSplitView {
-                SidebarView(model: sidebar, selection: $selection)
+                SidebarView(model: sidebar, search: search, selection: $selection)
             } detail: {
                 if let symbol = selection {
                     DetailView(model: DetailViewModel(
