@@ -136,7 +136,11 @@ private struct CloseChart: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(theme.background == .clear ? 0 : 12)
         .background(theme.background, in: RoundedRectangle(cornerRadius: theme.cornerStyle.radius))
+        // Collapse the chart's data elements into a single, stably-identified element so
+        // UI tests can assert the chart rendered without depending on pixel color.
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("Close price chart")
+        .accessibilityIdentifier("detail.chart")
     }
 
     private var lineColor: Color {

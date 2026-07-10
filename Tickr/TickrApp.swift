@@ -6,7 +6,7 @@ struct TickrApp: App {
     @State private var sidebar: SidebarViewModel
     @State private var search: SymbolSearchViewModel
     @State private var selection: SidebarViewModel.Row.ID?
-    @State private var themeStore = ThemeStore()
+    @State private var themeStore: ThemeStore
     @State private var apiKeyStore: APIKeyStore
 
     // Routing providers switch between live Finnhub and the offline mocks based on the
@@ -16,17 +16,19 @@ struct TickrApp: App {
     private let candleProvider: CandleProvider
 
     init() {
-        // One store, shared by the sidebar and search so adding a result updates both.
-        let store = FavoritesStore(fileURL: Self.favoritesFileURL())
-        let apiKeyStore = APIKeyStore()
-        _apiKeyStore = State(initialValue: apiKeyStore)
+        // Choose the whole dependency graph before any store or provider is built, so a
+        // `--ui-testing` launch is fully isolated and a normal launch is unchanged.
+        let deps = AppDependencies.make()
+        _themeStore = State(initialValue: deps.themeStore)
+        _apiKeyStore = State(initialValue: deps.apiKeyStore)
 
-        self.quoteProvider = ProviderFactory.quoteProvider(keyStore: apiKeyStore)
-        self.candleProvider = ProviderFactory.candleProvider(keyStore: apiKeyStore)
-        _sidebar = State(initialValue: SidebarViewModel(store: store, provider: quoteProvider))
+        self.quoteProvider = deps.quoteProvider
+        self.candleProvider = deps.candleProvider
+        // One favorites store, shared by the sidebar and search so adding a result updates both.
+        _sidebar = State(initialValue: SidebarViewModel(store: deps.favoritesStore, provider: deps.quoteProvider))
         _search = State(initialValue: SymbolSearchViewModel(
-            provider: ProviderFactory.searchProvider(keyStore: apiKeyStore),
-            store: store
+            provider: deps.searchProvider,
+            store: deps.favoritesStore
         ))
     }
 
@@ -60,16 +62,13 @@ struct TickrApp: App {
                 APIKeySettingsView(store: apiKeyStore)
                     .tabItem { Label("Data", systemImage: "key") }
                 ThemeSettingsView(store: themeStore)
-                    .tabItem { Label("Appearance", systemImage: "paintbrush") }
+                    // Identify the always-present tab button (built from the tabItem label)
+                    // rather than the tab's content, which is only in the tree once selected.
+                    .tabItem {
+                        Label("Appearance", systemImage: "paintbrush")
+                            .accessibilityIdentifier("settings.appearanceTab")
+                    }
             }
         }
-    }
-
-    private static func favoritesFileURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("Tickr", isDirectory: true)
-            .appendingPathComponent("favorites.json")
     }
 }

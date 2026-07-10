@@ -27,6 +27,8 @@ struct SidebarView: View {
             }
         }
         .searchable(text: $search.query, placement: .sidebar, prompt: "Search symbols")
+        // Stable handle for the sidebar search field so UI tests can drive the journey.
+        .accessibilityIdentifier("sidebar.search")
         .navigationTitle("Tickr")
         .task { await model.refresh() }
     }
@@ -99,8 +101,15 @@ private struct SearchResultRow: View {
                 .buttonStyle(.borderless)
                 .help("Add \(result.displaySymbol) to favorites")
                 .accessibilityLabel("Add \(result.displaySymbol) to favorites")
+                // Stable, non-localized handle keyed by the symbol id.
+                .accessibilityIdentifier("search.addFavorite.\(result.symbol)")
             }
         }
+        // Container: the row is findable by its own id while the add button below keeps
+        // its own, separately-queryable id.
+        .accessibilityElement(children: .contain)
+        // Stable, non-localized handle keyed by the symbol id.
+        .accessibilityIdentifier("search.result.\(result.symbol)")
     }
 }
 
@@ -130,6 +139,8 @@ private struct FavoriteRow: View {
                     .accessibilityLabel("Quote unavailable")
             }
         }
+        // Stable, non-localized handle keyed by the symbol id.
+        .accessibilityIdentifier("favorites.row.\(row.symbol)")
     }
 
     private func changeText(for quote: Quote) -> String {
