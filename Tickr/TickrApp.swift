@@ -6,9 +6,13 @@ struct TickrApp: App {
     @State private var sidebar: SidebarViewModel
     @State private var selection: SidebarViewModel.Row.ID?
 
+    // MockQuoteProvider / PreviewCandleProvider stand in until Settings wires the real
+    // providers (later issue).
+    private let quoteProvider: QuoteProvider = MockQuoteProvider()
+    private let candleProvider: CandleProvider = PreviewCandleProvider()
+
     init() {
         let store = FavoritesStore(fileURL: Self.favoritesFileURL())
-        // MockQuoteProvider stands in until Settings wires the real provider (later issue).
         _sidebar = State(initialValue: SidebarViewModel(store: store, provider: MockQuoteProvider()))
     }
 
@@ -17,7 +21,17 @@ struct TickrApp: App {
             NavigationSplitView {
                 SidebarView(model: sidebar, selection: $selection)
             } detail: {
-                DetailPlaceholderView()
+                if let symbol = selection {
+                    DetailView(model: DetailViewModel(
+                        symbol: symbol,
+                        quoteProvider: quoteProvider,
+                        candleProvider: candleProvider
+                    ))
+                    // Rebuild the detail (and its view model) when the selection changes.
+                    .id(symbol)
+                } else {
+                    DetailPlaceholderView()
+                }
             }
             .frame(minWidth: 640, minHeight: 420)
         }
