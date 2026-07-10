@@ -136,6 +136,11 @@ private struct CloseChart: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(theme.background == .clear ? 0 : 12)
         .background(theme.background, in: RoundedRectangle(cornerRadius: theme.cornerStyle.radius))
+        // Expose the loaded chart as one element carrying `detail.chart`; the id stays on
+        // this container and does not leak onto the chart's internal marks/axes. Present
+        // only in the loaded state, so its existence asserts the chart actually rendered.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("detail.chart")
         .accessibilityLabel("Close price chart")
     }
 
