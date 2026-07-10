@@ -79,6 +79,7 @@ struct DetailView: View {
 /// Symbol, current price, and color-coded daily change. Falls back to a placeholder
 /// when the quote hasn't loaded or failed, so the header never blocks the chart.
 private struct PriceHeader: View {
+    @Environment(\.theme) private var theme
     let symbol: String
     let quote: Quote?
 
@@ -109,14 +110,17 @@ private struct PriceHeader: View {
     }
 
     private func changeColor(for quote: Quote) -> Color {
-        if quote.percentChange > 0 { return .green }
-        if quote.percentChange < 0 { return .red }
+        if quote.percentChange > 0 { return theme.positiveChange }
+        if quote.percentChange < 0 { return theme.negativeChange }
         return .secondary
     }
 }
 
-/// The line chart of close prices. Colored by overall direction (up green, down red).
+/// The line chart of close prices, drawn on the theme's surface. Colored by overall
+/// direction (up/down use the theme's change colors), falling back to the theme's chart
+/// line color when flat.
 private struct CloseChart: View {
+    @Environment(\.theme) private var theme
     let points: [DetailViewModel.ChartPoint]
 
     var body: some View {
@@ -130,14 +134,16 @@ private struct CloseChart: View {
         }
         .chartYScale(domain: .automatic(includesZero: false))
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(theme.background == .clear ? 0 : 12)
+        .background(theme.background, in: RoundedRectangle(cornerRadius: theme.cornerStyle.radius))
         .accessibilityLabel("Close price chart")
     }
 
     private var lineColor: Color {
-        guard let first = points.first?.close, let last = points.last?.close else { return .accentColor }
-        if last > first { return .green }
-        if last < first { return .red }
-        return .accentColor
+        guard let first = points.first?.close, let last = points.last?.close else { return theme.chartLine }
+        if last > first { return theme.positiveChange }
+        if last < first { return theme.negativeChange }
+        return theme.chartLine
     }
 }
 

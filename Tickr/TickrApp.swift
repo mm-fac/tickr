@@ -6,6 +6,7 @@ struct TickrApp: App {
     @State private var sidebar: SidebarViewModel
     @State private var search: SymbolSearchViewModel
     @State private var selection: SidebarViewModel.Row.ID?
+    @State private var themeStore = ThemeStore()
 
     // MockQuoteProvider / PreviewCandleProvider / MockSymbolSearchProvider stand in until
     // Settings wires the real providers (later issue).
@@ -37,8 +38,16 @@ struct TickrApp: App {
                 }
             }
             .frame(minWidth: 640, minHeight: 420)
+            // A single selection recolors the whole tree: inject the active theme and
+            // drive the app-wide accent from it.
+            .environment(\.theme, themeStore.selected)
+            .tint(themeStore.selected.accent)
         }
         .defaultSize(width: 900, height: 600)
+
+        Settings {
+            ThemeSettingsView(store: themeStore)
+        }
     }
 
     private static func favoritesFileURL() -> URL {

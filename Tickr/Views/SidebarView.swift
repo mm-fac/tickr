@@ -107,6 +107,7 @@ private struct SearchResultRow: View {
 /// A single favorites row: symbol on the left, price and color-coded daily change
 /// on the right. Shows a placeholder when the quote hasn't loaded or failed.
 private struct FavoriteRow: View {
+    @Environment(\.theme) private var theme
     let row: SidebarViewModel.Row
 
     var body: some View {
@@ -136,8 +137,8 @@ private struct FavoriteRow: View {
     }
 
     private func changeColor(for quote: Quote) -> Color {
-        if quote.percentChange > 0 { return .green }
-        if quote.percentChange < 0 { return .red }
+        if quote.percentChange > 0 { return theme.positiveChange }
+        if quote.percentChange < 0 { return theme.negativeChange }
         return .secondary
     }
 }
