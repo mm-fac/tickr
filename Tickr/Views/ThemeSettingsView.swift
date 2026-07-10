@@ -1,13 +1,14 @@
+import AppKit
 import SwiftUI
 
 /// Settings pane letting the user pick the app theme. The selection is written straight
 /// through to ``ThemeStore`` (and thus persisted); the app root observes the store and
 /// re-injects the chosen theme into the environment, so the whole UI recolors live.
 ///
-/// The list of themes is exposed as one accessibility container, `settings.themePicker`,
-/// whose accessibility *value* is the currently selected theme id (`system`, `ocean`, …).
-/// Each row is a distinct control identified by `settings.theme.<id>`, so a UI test can
-/// select a theme and then assert semantic state (the picker's value) rather than color.
+/// The native inline ``Picker`` carries `settings.themePicker` as a container identifier
+/// whose accessibility *value* is the currently selected theme id (`system`, `ocean`, …),
+/// so a UI test can assert semantic state rather than color. Each row keeps its native
+/// selectable behavior and additionally carries `settings.theme.<id>`.
 struct ThemeSettingsView: View {
     let store: ThemeStore
 
@@ -16,51 +17,98 @@ struct ThemeSettingsView: View {
         // re-renders (updating the highlighted row and the exposed value) on change.
         let selectedID = store.selected.id
         return Form {
-            Section("Theme") {
+            Picker("Theme", selection: themeIDBinding(current: selectedID)) {
                 ForEach(BuiltInTheme.all, id: \.id) { theme in
-                    ThemeRow(
-                        name: theme.name,
-                        id: theme.id,
-                        isSelected: theme.id == selectedID,
-                        select: { store.select(theme) }
-                    )
+                    Text(theme.name)
+                        // The inline Picker wraps this label in a native radio NSButton.
+                        // Tag that actual actionable control without replacing its UI.
+                        .background(NativeButtonIdentifierBridge(
+                            identifier: "settings.theme.\(theme.id)"
+                        ))
+                        .tag(theme.id)
                 }
             }
+            .pickerStyle(.inline)
+            .accessibilityLabel("Theme")
+            .accessibilityIdentifier("settings.themePicker")
+            .accessibilityValue(selectedID)
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: 240)
-        // One container element carrying the picker id, with its value tracking the
-        // selected theme id so the smoke can wait for `ocean` without reading pixels.
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("settings.themePicker")
-        .accessibilityValue(selectedID)
+        .frame(width: 360, height: 200)
+    }
+
+    /// Bridges the picker's `String` tags to the store, resolving the id back to a theme
+    /// on selection.
+    private func themeIDBinding(current: String) -> Binding<String> {
+        Binding(
+            get: { current },
+            set: { store.select(BuiltInTheme.theme(id: $0)) }
+        )
     }
 }
 
-/// A single selectable theme row: the theme name with a checkmark when selected. A plain
-/// button so it stays one interactive element identified by `settings.theme.<id>`.
-private struct ThemeRow: View {
-    let name: String
-    let id: String
-    let isSelected: Bool
-    let select: () -> Void
+/// Applies a stable identifier to the native `NSButton` SwiftUI creates for one inline
+/// Picker option. Pairing the embedded label bridge with its adjacent native option avoids
+/// localized labels, UI-test indexes, global view-tree searches, and replacement controls.
+private struct NativeButtonIdentifierBridge: NSViewRepresentable {
+    let identifier: String
 
-    var body: some View {
-        Button(action: select) {
-            HStack {
-                Text(name)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
-                }
-            }
-            .contentShape(Rectangle())
+    func makeNSView(context: Context) -> TaggingView {
+        TaggingView(identifier: identifier)
+    }
+
+    func updateNSView(_ nsView: TaggingView, context: Context) {
+        nsView.identifierToApply = identifier
+        nsView.tagAssociatedButtonIfAvailable()
+    }
+
+    final class TaggingView: NSView {
+        var identifierToApply: String
+
+        init(identifier: String) {
+            self.identifierToApply = identifier
+            super.init(frame: .zero)
+            setAccessibilityElement(false)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("settings.theme.\(id)")
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            tagAssociatedButtonIfAvailable()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            tagAssociatedButtonIfAvailable()
+            DispatchQueue.main.async { [weak self] in self?.tagAssociatedButtonIfAvailable() }
+        }
+
+        func tagAssociatedButtonIfAvailable() {
+            // SwiftUI materializes an inline Picker option and this label bridge as
+            // adjacent platform-view hosts. Walk outward until our branch has a previous
+            // sibling, then tag the nearest preceding native button subtree. This keeps
+            // each stable id paired with its own option without labels or global indexes.
+            var branch: NSView = self
+            while let parent = branch.superview {
+                if let index = parent.subviews.firstIndex(where: { $0 === branch }), index > 0 {
+                    for sibling in parent.subviews[..<index].reversed() {
+                        if let button = Self.buttons(in: sibling).last {
+                            button.setAccessibilityIdentifier(identifierToApply)
+                            return
+                        }
+                    }
+                }
+                branch = parent
+            }
+        }
+
+        private static func buttons(in view: NSView) -> [NSButton] {
+            let current = (view as? NSButton).map { [$0] } ?? []
+            return current + view.subviews.flatMap(buttons(in:))
+        }
     }
 }
 

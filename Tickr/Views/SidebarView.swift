@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TickrCore
 
@@ -11,36 +12,30 @@ struct SidebarView: View {
     @Binding var selection: SidebarViewModel.Row.ID?
 
     var body: some View {
-        VStack(spacing: 0) {
-            // A dedicated search field (rather than `.searchable`) so exactly one
-            // interactive control carries the `sidebar.search` identifier — the macOS
-            // `.searchable` field cannot be uniquely identified without third-party
-            // introspection, and decorating its container leaks the id onto sibling text.
-            SidebarSearchField(text: $search.query)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-            Divider()
-            content
-        }
-        .navigationTitle("Tickr")
-        .task { await model.refresh() }
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        if isSearching {
-            SearchResultsList(search: search)
-        } else if model.rows.isEmpty {
-            ContentUnavailableView(
-                "No favorites yet",
-                systemImage: "star",
-                description: Text("Search above to add a symbol to track.")
-            )
-        } else {
-            List(model.rows, selection: $selection) { row in
-                FavoriteRow(row: row)
+        Group {
+            if isSearching {
+                SearchResultsList(search: search)
+            } else if model.rows.isEmpty {
+                ContentUnavailableView(
+                    "No favorites yet",
+                    systemImage: "star",
+                    description: Text("Search above to add a symbol to track.")
+                )
+            } else {
+                List(model.rows, selection: $selection) { row in
+                    FavoriteRow(row: row) {
+                        selection = row.id
+                    }
+                }
             }
         }
+        .searchable(text: $search.query, placement: .sidebar, prompt: "Search symbols")
+        // `.searchable` renders its own `NSSearchField` inside the window's toolbar; this
+        // tags that real field with a stable identifier without replacing it (see
+        // `SearchFieldIdentifierBridge` below).
+        .background(SearchFieldIdentifierBridge(identifier: "sidebar.search"))
+        .navigationTitle("Tickr")
+        .task { await model.refresh() }
     }
 
     /// The search field is driving the sidebar whenever it has produced any non-idle
@@ -50,34 +45,80 @@ struct SidebarView: View {
     }
 }
 
-/// A single interactive search field for the sidebar. A magnifying-glass affordance and a
-/// clear button flank a plain ``TextField`` that carries the `sidebar.search` identifier as
-/// one accessibility element, preserving type-to-search / clear-to-return behavior.
-private struct SidebarSearchField: View {
-    @Binding var text: String
+/// Bridges the real `NSSearchField` behind SwiftUI's native `.searchable` toolbar item to a
+/// stable, non-localized accessibility identifier.
+///
+/// macOS has no SwiftUI modifier that reaches the field `.searchable` generates — it is
+/// rendered through `NSSearchToolbarItem`, a public AppKit class. This drops one invisible,
+/// zero-drawing `NSView` into the hierarchy that, once it has a window, looks up that
+/// toolbar item and tags its `searchField` directly: the narrowest AppKit bridge that
+/// reaches the single already-existing control, rather than attaching the identifier to the
+/// `.searchable` container/content tree or substituting a custom text field.
+private struct SearchFieldIdentifierBridge: NSViewRepresentable {
+    let identifier: String
 
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            TextField("Search symbols", text: $text)
-                .textFieldStyle(.plain)
-                .accessibilityIdentifier("sidebar.search")
-            if !text.isEmpty {
-                Button {
-                    text = ""
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Clear search")
-            }
+    func makeNSView(context: Context) -> TaggingView {
+        TaggingView(accessibilityIdentifier: identifier)
+    }
+
+    func updateNSView(_ nsView: TaggingView, context: Context) {
+        nsView.accessibilityIdentifierToApply = identifier
+        nsView.tagSearchFieldIfNeeded()
+    }
+
+    // Named `accessibilityIdentifierToApply` (rather than `identifier`) because `NSView`
+    // already declares its own `identifier: NSUserInterfaceItemIdentifier?`.
+    final class TaggingView: NSView {
+        var accessibilityIdentifierToApply: String
+
+        init(accessibilityIdentifier: String) {
+            self.accessibilityIdentifierToApply = accessibilityIdentifier
+            super.init(frame: .zero)
+            setAccessibilityElement(false)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        deinit {
+            NotificationCenter.default.removeObserver(self)
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            NotificationCenter.default.removeObserver(self)
+            guard let window else { return }
+
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(windowDidUpdate),
+                name: NSWindow.didUpdateNotification,
+                object: window
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(toolbarWillAddItem),
+                name: NSToolbar.willAddItemNotification,
+                object: nil
+            )
+            tagSearchFieldIfNeeded()
+            DispatchQueue.main.async { [weak self] in self?.tagSearchFieldIfNeeded() }
+        }
+
+        @objc private func windowDidUpdate(_ notification: Notification) {
+            tagSearchFieldIfNeeded()
+        }
+
+        @objc private func toolbarWillAddItem(_ notification: Notification) {
+            DispatchQueue.main.async { [weak self] in self?.tagSearchFieldIfNeeded() }
+        }
+
+        func tagSearchFieldIfNeeded() {
+            let searchItems = window?.toolbar?.items.compactMap { $0 as? NSSearchToolbarItem } ?? []
+            guard searchItems.count == 1, let searchItem = searchItems.first else { return }
+            searchItem.searchField.setAccessibilityIdentifier(accessibilityIdentifierToApply)
+        }
     }
 }
 
@@ -157,11 +198,13 @@ private struct SearchResultRow: View {
 
 /// A single favorites row: symbol on the left, price and color-coded daily change
 /// on the right. Shows a placeholder when the quote hasn't loaded or failed. Combined into
-/// one interactive accessibility element (`favorites.row.<symbol>`) so selecting it is
-/// unambiguous and the id never propagates to its price/change descendants.
+/// one accessibility element (`favorites.row.<symbol>`) so selecting it is unambiguous and
+/// the id never propagates to its price/change descendants. It exposes both a button role and
+/// a real default accessibility action that drives the same selection as clicking the List row.
 private struct FavoriteRow: View {
     @Environment(\.theme) private var theme
     let row: SidebarViewModel.Row
+    let select: () -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -186,6 +229,10 @@ private struct FavoriteRow: View {
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("favorites.row.\(row.symbol)")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default) {
+            select()
+        }
     }
 
     private func changeText(for quote: Quote) -> String {
