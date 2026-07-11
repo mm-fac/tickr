@@ -6,27 +6,30 @@ struct TickrApp: App {
     @State private var sidebar: SidebarViewModel
     @State private var search: SymbolSearchViewModel
     @State private var selection: SidebarViewModel.Row.ID?
-    @State private var themeStore = ThemeStore()
+    @State private var themeStore: ThemeStore
     @State private var apiKeyStore: APIKeyStore
 
     // Routing providers switch between live Finnhub and the offline mocks based on the
-    // key in `apiKeyStore`, re-checked per request so entering a key in Settings takes
-    // effect immediately (no restart).
+    // key in `apiKeyStore` (or are forced mocks under `--ui-testing`), re-checked per
+    // request so entering a key in Settings takes effect immediately (no restart).
     private let quoteProvider: QuoteProvider
     private let candleProvider: CandleProvider
 
     init() {
-        // One store, shared by the sidebar and search so adding a result updates both.
-        let store = FavoritesStore(fileURL: Self.favoritesFileURL())
-        let apiKeyStore = APIKeyStore()
-        _apiKeyStore = State(initialValue: apiKeyStore)
+        // Chooses the whole dependency graph — production or the deterministic
+        // `--ui-testing` mode — before any production storage/service object exists.
+        let dependencies = AppDependencies()
 
-        self.quoteProvider = ProviderFactory.quoteProvider(keyStore: apiKeyStore)
-        self.candleProvider = ProviderFactory.candleProvider(keyStore: apiKeyStore)
-        _sidebar = State(initialValue: SidebarViewModel(store: store, provider: quoteProvider))
+        _apiKeyStore = State(initialValue: dependencies.apiKeyStore)
+        _themeStore = State(initialValue: dependencies.themeStore)
+
+        self.quoteProvider = dependencies.quoteProvider
+        self.candleProvider = dependencies.candleProvider
+        // One store, shared by the sidebar and search so adding a result updates both.
+        _sidebar = State(initialValue: SidebarViewModel(store: dependencies.favoritesStore, provider: quoteProvider))
         _search = State(initialValue: SymbolSearchViewModel(
-            provider: ProviderFactory.searchProvider(keyStore: apiKeyStore),
-            store: store
+            provider: dependencies.searchProvider,
+            store: dependencies.favoritesStore
         ))
     }
 
@@ -62,14 +65,14 @@ struct TickrApp: App {
                 ThemeSettingsView(store: themeStore)
                     .tabItem { Label("Appearance", systemImage: "paintbrush") }
             }
+            // The Settings TabView renders its tabs as one native NSSegmentedControl;
+            // this tags the real Appearance segment's exposed AXRadioButton element (see
+            // AccessibilityBridge for why a plain SwiftUI identifier can't do this).
+            .background(SegmentedTabAccessibilityTag(
+                identifier: "settings.appearanceTab",
+                segmentIndex: 1,
+                segmentCount: 2
+            ))
         }
-    }
-
-    private static func favoritesFileURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("Tickr", isDirectory: true)
-            .appendingPathComponent("favorites.json")
     }
 }

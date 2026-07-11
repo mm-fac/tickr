@@ -22,11 +22,14 @@ struct SidebarView: View {
                 )
             } else {
                 List(model.rows, selection: $selection) { row in
-                    FavoriteRow(row: row)
+                    FavoriteRow(row: row, select: { selection = row.id })
                 }
             }
         }
         .searchable(text: $search.query, placement: .sidebar, prompt: "Search symbols")
+        // Tags the one real NSSearchField `.searchable` generates with a stable id;
+        // see AccessibilityBridge — a plain modifier on this tree isn't sufficient.
+        .background(SearchFieldAccessibilityTag(identifier: "sidebar.search"))
         .navigationTitle("Tickr")
         .task { await model.refresh() }
     }
@@ -99,8 +102,13 @@ private struct SearchResultRow: View {
                 .buttonStyle(.borderless)
                 .help("Add \(result.displaySymbol) to favorites")
                 .accessibilityLabel("Add \(result.displaySymbol) to favorites")
+                .accessibilityIdentifier("search.addFavorite.\(result.symbol)")
             }
         }
+        // `.contain` keeps the add button individually queryable while still giving the
+        // row itself one stable, unambiguous identifier.
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("search.result.\(result.symbol)")
     }
 }
 
@@ -109,6 +117,7 @@ private struct SearchResultRow: View {
 private struct FavoriteRow: View {
     @Environment(\.theme) private var theme
     let row: SidebarViewModel.Row
+    let select: () -> Void
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -130,6 +139,15 @@ private struct FavoriteRow: View {
                     .accessibilityLabel("Quote unavailable")
             }
         }
+        // Collapses the row into one stable, clickable accessibility element (rather
+        // than leaking its symbol/price/change children as separate nodes sharing the
+        // identifier) and wires a default action to the same selection the List's own
+        // click already performs, so an AX-driven press opens the detail too.
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("favorites.row.\(row.symbol)")
+        .accessibilityLabel(Text(row.symbol))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { select() }
     }
 
     private func changeText(for quote: Quote) -> String {

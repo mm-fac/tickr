@@ -18,6 +18,13 @@ struct ThemeSettingsView: View {
             }
             .pickerStyle(.inline)
             .accessibilityLabel("Theme")
+            // Non-interactive value container: exposes the current selection as its
+            // accessibility value so a test can assert semantic state, not pixel color.
+            .accessibilityIdentifier("settings.themePicker")
+            .accessibilityValue(selectedID)
+            // Tags each native inline-picker option (a real AXRadioButton) with
+            // `settings.theme.<id>`; see AccessibilityBridge for why.
+            .background(ThemeOptionsAccessibilityTag(themeIDs: BuiltInTheme.all.map(\.id)))
         }
         .formStyle(.grouped)
         .frame(width: 360, height: 200)
