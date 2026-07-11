@@ -13,11 +13,21 @@ struct ThemeSettingsView: View {
         return Form {
             Picker("Theme", selection: themeIDBinding(current: selectedID)) {
                 ForEach(BuiltInTheme.all, id: \.id) { theme in
-                    Text(theme.name).tag(theme.id)
+                    // Each option carries a stable, non-localized `settings.theme.<id>`
+                    // identifier so the smoke can select Ocean without a display string.
+                    // `.tag` stays outermost so the Picker reliably reads the selection tag.
+                    Text(theme.name)
+                        .accessibilityIdentifier("settings.theme.\(theme.id)")
+                        .tag(theme.id)
                 }
             }
             .pickerStyle(.inline)
             .accessibilityLabel("Theme")
+            .accessibilityIdentifier("settings.themePicker")
+            // Expose the current theme id as the picker's accessibility value (`system`
+            // initially, `ocean` after selecting Ocean) so the smoke asserts semantic state
+            // rather than pixel color.
+            .accessibilityValue(selectedID)
         }
         .formStyle(.grouped)
         .frame(width: 360, height: 200)

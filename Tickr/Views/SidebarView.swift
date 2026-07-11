@@ -27,6 +27,14 @@ struct SidebarView: View {
             }
         }
         .searchable(text: $search.query, placement: .sidebar, prompt: "Search symbols")
+        // Tag the single native sidebar search field with `sidebar.search`. The identifier
+        // can't ride on `.searchable` (it would leak to the empty-state text), so an AppKit
+        // bridge reaches the generated field directly. Zero-size, behaviorally inert.
+        .background(
+            SearchFieldIdentifier(identifier: "sidebar.search")
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+        )
         .navigationTitle("Tickr")
         .task { await model.refresh() }
     }
@@ -79,6 +87,9 @@ private struct SearchResultRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
+            // Collapse symbol + description into one accessibility element so the row's
+            // `search.result.<symbol>` identifier resolves to a single node instead of
+            // propagating to each `StaticText` descendant.
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.displaySymbol)
                     .font(.headline)
@@ -87,18 +98,23 @@ private struct SearchResultRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("search.result.\(result.symbol)")
             Spacer()
             if isFavorited {
                 Image(systemName: "checkmark")
                     .foregroundStyle(.secondary)
                     .accessibilityLabel("Added to favorites")
             } else {
+                // The add control stays a separately interactive button with its own
+                // `search.addFavorite.<symbol>` identifier.
                 Button(action: add) {
                     Image(systemName: "plus.circle")
                 }
                 .buttonStyle(.borderless)
                 .help("Add \(result.displaySymbol) to favorites")
                 .accessibilityLabel("Add \(result.displaySymbol) to favorites")
+                .accessibilityIdentifier("search.addFavorite.\(result.symbol)")
             }
         }
     }
@@ -130,6 +146,14 @@ private struct FavoriteRow: View {
                     .accessibilityLabel("Quote unavailable")
             }
         }
+        // Present the whole row as one interactive element so `favorites.row.<symbol>`
+        // resolves unambiguously (not to its symbol/price/change descendants). The row is
+        // selectable via the enclosing `List(selection:)`, so mark it as a button; clicking
+        // this single element selects the symbol and opens its detail.
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityIdentifier("favorites.row.\(row.symbol)")
     }
 
     private func changeText(for quote: Quote) -> String {

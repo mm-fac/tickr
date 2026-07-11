@@ -6,27 +6,31 @@ struct TickrApp: App {
     @State private var sidebar: SidebarViewModel
     @State private var search: SymbolSearchViewModel
     @State private var selection: SidebarViewModel.Row.ID?
-    @State private var themeStore = ThemeStore()
+    @State private var themeStore: ThemeStore
     @State private var apiKeyStore: APIKeyStore
 
-    // Routing providers switch between live Finnhub and the offline mocks based on the
-    // key in `apiKeyStore`, re-checked per request so entering a key in Settings takes
-    // effect immediately (no restart).
+    // The active providers for the sidebar/detail. In a normal launch these route between
+    // live Finnhub/Yahoo and the offline mocks based on the key in `apiKeyStore`; in a
+    // `--ui-testing` launch they are the forced offline mocks (see `AppDependencies`).
     private let quoteProvider: QuoteProvider
     private let candleProvider: CandleProvider
 
     init() {
-        // One store, shared by the sidebar and search so adding a result updates both.
-        let store = FavoritesStore(fileURL: Self.favoritesFileURL())
-        let apiKeyStore = APIKeyStore()
-        _apiKeyStore = State(initialValue: apiKeyStore)
+        // Choose the whole dependency graph up front from the launch mode, before any
+        // storage or service object is constructed. A normal launch is behaviorally
+        // unchanged; only the exact `--ui-testing` argument selects the isolated, offline
+        // graph. One favorites store is shared by the sidebar and search so adding a result
+        // updates both.
+        let deps = AppDependencies.make(mode: LaunchMode(arguments: CommandLine.arguments))
+        _apiKeyStore = State(initialValue: deps.apiKeyStore)
+        _themeStore = State(initialValue: deps.themeStore)
 
-        self.quoteProvider = ProviderFactory.quoteProvider(keyStore: apiKeyStore)
-        self.candleProvider = ProviderFactory.candleProvider(keyStore: apiKeyStore)
-        _sidebar = State(initialValue: SidebarViewModel(store: store, provider: quoteProvider))
+        self.quoteProvider = deps.quoteProvider
+        self.candleProvider = deps.candleProvider
+        _sidebar = State(initialValue: SidebarViewModel(store: deps.favoritesStore, provider: deps.quoteProvider))
         _search = State(initialValue: SymbolSearchViewModel(
-            provider: ProviderFactory.searchProvider(keyStore: apiKeyStore),
-            store: store
+            provider: deps.searchProvider,
+            store: deps.favoritesStore
         ))
     }
 
@@ -58,18 +62,16 @@ struct TickrApp: App {
         Settings {
             TabView {
                 APIKeySettingsView(store: apiKeyStore)
-                    .tabItem { Label("Data", systemImage: "key") }
+                    .tabItem {
+                        Label("Data", systemImage: "key")
+                            .accessibilityIdentifier("settings.dataTab")
+                    }
                 ThemeSettingsView(store: themeStore)
-                    .tabItem { Label("Appearance", systemImage: "paintbrush") }
+                    .tabItem {
+                        Label("Appearance", systemImage: "paintbrush")
+                            .accessibilityIdentifier("settings.appearanceTab")
+                    }
             }
         }
-    }
-
-    private static func favoritesFileURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("Tickr", isDirectory: true)
-            .appendingPathComponent("favorites.json")
     }
 }

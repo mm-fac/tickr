@@ -136,7 +136,9 @@ private struct CloseChart: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(theme.background == .clear ? 0 : 12)
         .background(theme.background, in: RoundedRectangle(cornerRadius: theme.cornerStyle.radius))
+        .accessibilityElement(children: .combine)
         .accessibilityLabel("Close price chart")
+        .accessibilityIdentifier("detail.chart")
     }
 
     private var lineColor: Color {
